@@ -10,6 +10,7 @@ interface Repo {
   sourceType: "LOCAL_PATH" | "GIT_URL";
   location: string;
   defaultBranch: string;
+  hostname: string | null;
 }
 
 export default function RepoRow({ repo, taskCount }: { repo: Repo; taskCount: number }) {
@@ -56,7 +57,7 @@ export default function RepoRow({ repo, taskCount }: { repo: Repo; taskCount: nu
   if (editing) {
     return (
       <tr className="border-t border-neutral-700 bg-neutral-800/50">
-        <td className="px-4 py-2" colSpan={5}>
+        <td className="px-4 py-2" colSpan={6}>
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <input
@@ -116,6 +117,7 @@ export default function RepoRow({ repo, taskCount }: { repo: Repo; taskCount: nu
           · {taskCount} task{taskCount === 1 ? "" : "s"}
         </span>
       </td>
+      <td className="px-4 py-2 font-mono text-xs text-neutral-400">{repo.hostname ?? "-"}</td>
       <td className="px-4 py-2 text-right">
         <div className="flex justify-end gap-2">
           <button

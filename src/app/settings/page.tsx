@@ -1,13 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import CreateWebhookForm from "@/components/CreateWebhookForm";
 import CreateTokenForm from "@/components/CreateTokenForm";
 import DeleteButton from "@/components/DeleteButton";
 
 export default async function SettingsPage() {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const [repos, webhooks, tokens] = await Promise.all([
-    prisma.repo.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.webhookConfig.findMany({ include: { repo: true } }),
-    prisma.apiToken.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.repo.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
+    prisma.webhookConfig.findMany({ where: { repo: { userId } }, include: { repo: true } }),
+    prisma.apiToken.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
   ]);
 
   return (

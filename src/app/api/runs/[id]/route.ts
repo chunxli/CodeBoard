@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getRunDiff } from "@/lib/git-safety";
+import { getSessionUserId } from "@/lib/session";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = await getSessionUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
-  const run = await prisma.run.findUnique({
-    where: { id },
+  const run = await prisma.run.findFirst({
+    where: { id, task: { repo: { userId } } },
     include: { task: { include: { repo: true } } },
   });
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });

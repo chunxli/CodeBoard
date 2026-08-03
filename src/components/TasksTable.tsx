@@ -13,7 +13,7 @@ interface TaskRow {
   triggerType: string;
   cronExpression: string | null;
   nextRunAt: string | null;
-  repo: { name: string };
+  repo: { name: string; hostname: string | null };
   runs: { status: string }[];
 }
 
@@ -76,6 +76,7 @@ export default function TasksTable({ tasks }: { tasks: TaskRow[] }) {
             <tr>
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Repo</th>
+              <th className="px-4 py-2">Machine</th>
               <th className="px-4 py-2">Trigger</th>
               <th className="px-4 py-2">Enabled</th>
               <th className="px-4 py-2">Next run</th>
@@ -91,6 +92,7 @@ export default function TasksTable({ tasks }: { tasks: TaskRow[] }) {
                   </Link>
                 </td>
                 <td className="px-4 py-2 text-neutral-400">{task.repo.name}</td>
+                <td className="px-4 py-2 font-mono text-xs text-neutral-400">{task.repo.hostname ?? "-"}</td>
                 <td className="px-4 py-2 text-neutral-400">
                   {task.triggerType}
                   {task.triggerType === "SCHEDULE" && task.cronExpression && (
@@ -120,7 +122,7 @@ export default function TasksTable({ tasks }: { tasks: TaskRow[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
                   No tasks match.
                 </td>
               </tr>

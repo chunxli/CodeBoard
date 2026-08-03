@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { prisma } from "@/lib/prisma";
 import { resolveRepoWorkdir, syncRepoToDefaultBranch } from "@/lib/repo-workdir";
 import { createSafeBranch, isGitRepo } from "@/lib/git-safety";
@@ -35,7 +36,13 @@ export async function executeRun(runId: string): Promise<void> {
 
     await prisma.run.update({
       where: { id: run.id },
-      data: { status: "RUNNING", branchName, startedAt: new Date(), outputFormat: task.outputFormat },
+      data: {
+        status: "RUNNING",
+        branchName,
+        startedAt: new Date(),
+        outputFormat: task.outputFormat,
+        hostname: hostname(),
+      },
     });
 
     const permissionMode: RunPermissionMode = task.permissionMode === "full" ? "full" : "default";

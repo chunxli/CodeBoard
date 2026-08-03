@@ -1,10 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import { getNextRunDate } from "@/lib/cron-next-run";
 import TasksTable from "@/components/TasksTable";
 
 export default async function TasksPage() {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const tasks = await prisma.task.findMany({
+    where: { repo: { userId } },
     orderBy: { createdAt: "desc" },
     include: { repo: true, runs: { orderBy: { createdAt: "desc" }, take: 1 } },
   });

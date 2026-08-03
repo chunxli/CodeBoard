@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import { formatDuration } from "@/lib/format";
 import { getNextRunDate } from "@/lib/cron-next-run";
 import StatusBadge from "@/components/StatusBadge";
@@ -14,9 +15,12 @@ export default async function TaskDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const { id } = await params;
-  const task = await prisma.task.findUnique({
-    where: { id },
+  const task = await prisma.task.findFirst({
+    where: { id, repo: { userId } },
     include: { repo: true, runs: { orderBy: { createdAt: "desc" } } },
   });
   if (!task) notFound();
@@ -34,6 +38,7 @@ export default async function TaskDetailPage({
           <p className="text-sm text-neutral-400">
             {task.repo.name} · {task.triggerType}
             {task.cronExpression && ` · ${task.cronExpression}`}
+            {task.repo.hostname && ` · 机器：${task.repo.hostname}`}
           </p>
           {task.triggerType === "SCHEDULE" && (
             <p className="mt-1 text-sm text-neutral-400">

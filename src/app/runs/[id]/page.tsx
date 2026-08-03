@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import { getRunDiff } from "@/lib/git-safety";
 import { formatDuration } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
@@ -15,9 +16,12 @@ export default async function RunDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const { id } = await params;
-  const run = await prisma.run.findUnique({
-    where: { id },
+  const run = await prisma.run.findFirst({
+    where: { id, task: { repo: { userId } } },
     include: { task: { include: { repo: true } } },
   });
   if (!run) notFound();
@@ -43,6 +47,7 @@ export default async function RunDetailPage({
           Trigger: {run.trigger}
           {run.branchName && ` · Branch: ${run.branchName}`}
           {run.startedAt && ` · Duration: ${formatDuration(run.startedAt, run.finishedAt)}`}
+          {(run.hostname ?? run.task.repo.hostname) && ` · Machine: ${run.hostname ?? run.task.repo.hostname}`}
         </p>
         {run.errorMessage && <p className="mt-2 text-sm text-red-400">{run.errorMessage}</p>}
       </div>

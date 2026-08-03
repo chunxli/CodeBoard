@@ -19,16 +19,26 @@ export default function GlobalSearch() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handle = setTimeout(async () => {
-      const trimmed = query.trim();
+    const trimmed = query.trim();
+    const controller = new AbortController();
+    const handle = setTimeout(() => {
       if (trimmed.length < 2) {
         setResults(EMPTY);
         return;
       }
-      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}`);
-      if (res.ok) setResults(await res.json());
+      fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setResults(data);
+        })
+        .catch(() => {});
     }, 250);
-    return () => clearTimeout(handle);
+    // Cancels both the pending debounce timer and any in-flight request from a stale query,
+    // so a fast-typed later query can never be overwritten by an earlier one's late response.
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
   }, [query]);
 
   useEffect(() => {

@@ -1,8 +1,13 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import CreateTaskForm from "@/components/CreateTaskForm";
 
 export default async function NewTaskPage() {
-  const repos = await prisma.repo.findMany({ orderBy: { createdAt: "desc" } });
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
+  const repos = await prisma.repo.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
 
   return (
     <div className="space-y-6">

@@ -1,9 +1,15 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import AddRepoForm from "@/components/AddRepoForm";
 import RepoRow from "@/components/RepoRow";
 
 export default async function ReposPage() {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const repos = await prisma.repo.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { tasks: true } } },
   });
@@ -20,6 +26,7 @@ export default async function ReposPage() {
               <th className="px-4 py-2">Type</th>
               <th className="px-4 py-2">Location</th>
               <th className="px-4 py-2">Branch</th>
+              <th className="px-4 py-2">Machine</th>
               <th className="px-4 py-2" />
             </tr>
           </thead>
@@ -29,7 +36,7 @@ export default async function ReposPage() {
             ))}
             {repos.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-neutral-500">
                   No repos yet.
                 </td>
               </tr>

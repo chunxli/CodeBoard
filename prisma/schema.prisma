@@ -40,18 +40,25 @@ enum RunTrigger {
 
 model Repo {
   id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   sourceType  RepoSourceType
   // Absolute local path (LOCAL_PATH) or git remote URL (GIT_URL)
   location    String
   defaultBranch String       @default("main")
+  // Hostname of the machine this app was running on when the repo was registered — since the
+  // Copilot CLI runs on whatever host serves this app, this disambiguates repos across machines
+  // when the same account is used to sign in from multiple locations/deployments.
+  hostname    String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
   tasks       Task[]
   webhooks    WebhookConfig[]
 
-  @@unique([sourceType, location])
+  @@unique([userId, sourceType, location])
+  @@index([userId])
 }
 
 model Task {
@@ -80,6 +87,9 @@ model Task {
   runs            Run[]
 
   @@index([repoId])
+  // Speeds up the scheduler's 30s reconciliation query and the webhook receiver's task lookup,
+  // both of which filter by triggerType + enabled.
+  @@index([triggerType, enabled])
 }
 
 model Run {
@@ -105,17 +115,24 @@ model Run {
   // pidusage sample taken while the process was alive (not available after the process exits).
   cpuTimeMs    Int?
   peakMemoryMb Float?
+  // Hostname of the machine that actually executed this run (set once it starts) — a PENDING run
+  // that hasn't started yet has no value here; fall back to the task's repo hostname in the UI.
+  hostname     String?
 
   @@index([taskId])
 }
 
 model ApiToken {
   id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   // SHA-256 hash of the token; the raw token is only shown once at creation time
   tokenHash  String    @unique
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
+
+  @@index([userId])
 }
 
 model WebhookConfig {
@@ -128,4 +145,55 @@ model WebhookConfig {
   createdAt     DateTime @default(now())
 
   @@index([repoId])
+}
+
+// --- Auth.js (NextAuth) models, required shape for @auth/prisma-adapter ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts      Account[]
+  sessions      Session[]
+  repos         Repo[]
+  apiTokens     ApiToken[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }

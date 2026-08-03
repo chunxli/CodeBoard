@@ -35,40 +35,57 @@ export default function LiveRunLog({
       void Notification.requestPermission();
     }
 
-    const source = new EventSource(`/api/runs/${runId}/stream`);
+    let source: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
 
-    source.onmessage = (e) => {
-      const event: CopilotRunEvent = JSON.parse(e.data);
-      if (event.type === "line" && event.data) {
-        setLines((prev) => [...prev, event.data!]);
-      } else if (event.type === "exit" || event.type === "error") {
-        setFinished(true);
-        source.close();
-        router.refresh();
+    function connect() {
+      source = new EventSource(`/api/runs/${runId}/stream`);
 
-        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-          const title =
-            event.type === "error"
-              ? "CodeBoard run failed to start"
-              : event.cancelled
-                ? "CodeBoard run cancelled"
-                : event.timedOut
-                  ? "CodeBoard run timed out"
-                  : event.code === 0
-                    ? "CodeBoard run succeeded"
-                    : "CodeBoard run failed";
-          new Notification(title, { body: `Run ${runId.slice(0, 8)}` });
+      source.onmessage = (e) => {
+        const event: CopilotRunEvent = JSON.parse(e.data);
+        if (event.type === "line" && event.data) {
+          setLines((prev) => [...prev, event.data!]);
+        } else if (event.type === "exit" || event.type === "error") {
+          stopped = true;
+          setFinished(true);
+          source.close();
+          router.refresh();
+
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            const title =
+              event.type === "error"
+                ? "CodeBoard run failed to start"
+                : event.cancelled
+                  ? "CodeBoard run cancelled"
+                  : event.timedOut
+                    ? "CodeBoard run timed out"
+                    : event.code === 0
+                      ? "CodeBoard run succeeded"
+                      : "CodeBoard run failed";
+            new Notification(title, { body: `Run ${runId.slice(0, 8)}` });
+          }
         }
-      }
-    };
+      };
 
-    source.onerror = () => {
+      // A dropped connection (network blip, laptop sleep, etc.) isn't the same as the run
+      // finishing — reconnect instead of leaving the UI stuck on "Live" forever.
+      source.onerror = () => {
+        source.close();
+        if (!stopped) reconnectTimer = setTimeout(connect, 2000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      stopped = true;
+      clearTimeout(reconnectTimer);
       source.close();
     };
-
-    return () => source.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, isLive]);
+
 
   useEffect(() => {
     containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight });

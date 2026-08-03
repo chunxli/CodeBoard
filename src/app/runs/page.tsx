@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import type { RunStatus } from "@/generated/prisma/client";
 import StatusBadge from "@/components/StatusBadge";
 import RunStatusFilter from "@/components/RunStatusFilter";
@@ -14,9 +16,15 @@ export default async function RunsPage({
 }: {
   searchParams: Promise<{ status?: string; page?: string }>;
 }) {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const { status, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
-  const where = status && VALID_STATUSES.has(status) ? { status: status as RunStatus } : undefined;
+  const where = {
+    task: { repo: { userId } },
+    ...(status && VALID_STATUSES.has(status) ? { status: status as RunStatus } : {}),
+  };
 
   const [runs, total] = await Promise.all([
     prisma.run.findMany({
@@ -24,7 +32,7 @@ export default async function RunsPage({
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { task: { select: { id: true, name: true } } },
+      include: { task: { select: { id: true, name: true, repo: { select: { hostname: true } } } } },
     }),
     prisma.run.count({ where }),
   ]);
@@ -43,6 +51,7 @@ export default async function RunsPage({
           <thead className="bg-neutral-800 text-left text-neutral-400">
             <tr>
               <th className="px-4 py-2">Task</th>
+              <th className="px-4 py-2">Machine</th>
               <th className="px-4 py-2">Trigger</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Started</th>
@@ -61,6 +70,9 @@ export default async function RunsPage({
                       {run.task.name}
                     </Link>
                   </td>
+                  <td className="px-4 py-2 font-mono text-xs text-neutral-400">
+                    {run.hostname ?? run.task.repo.hostname ?? "-"}
+                  </td>
                   <td className="px-4 py-2 text-neutral-400">{run.trigger}</td>
                   <td className="px-4 py-2">
                     <StatusBadge status={run.status} />
@@ -78,7 +90,7 @@ export default async function RunsPage({
             })}
             {runs.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-neutral-500">
                   No runs found.
                 </td>
               </tr>

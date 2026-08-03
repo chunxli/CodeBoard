@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import EditTaskForm from "@/components/EditTaskForm";
 
 export default async function EditTaskPage({
@@ -7,10 +8,13 @@ export default async function EditTaskPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const { id } = await params;
   const [task, repos] = await Promise.all([
-    prisma.task.findUnique({ where: { id } }),
-    prisma.repo.findMany({ orderBy: { name: "asc" } }),
+    prisma.task.findFirst({ where: { id, repo: { userId } } }),
+    prisma.repo.findMany({ where: { userId }, orderBy: { name: "asc" } }),
   ]);
   if (!task) notFound();
 

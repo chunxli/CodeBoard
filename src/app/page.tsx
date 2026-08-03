@@ -1,26 +1,33 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getSessionUserId } from "@/lib/session";
 import StatusBadge from "@/components/StatusBadge";
 import ActivityChart, { type DayBucket } from "@/components/ActivityChart";
 
 export default async function DashboardPage() {
+  const userId = await getSessionUserId();
+  if (!userId) redirect("/api/auth/signin");
+
   const since = new Date();
   since.setDate(since.getDate() - 13);
   since.setHours(0, 0, 0, 0);
 
   const [runs, taskCount, repoCount, recentRuns] = await Promise.all([
     prisma.run.findMany({
+      where: { task: { repo: { userId } } },
       orderBy: { createdAt: "desc" },
       take: 20,
       include: { task: { select: { id: true, name: true } } },
     }),
-    prisma.task.count(),
-    prisma.repo.count(),
+    prisma.task.count({ where: { repo: { userId } } }),
+    prisma.repo.count({ where: { userId } }),
     prisma.run.findMany({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, task: { repo: { userId } } },
       select: { status: true, createdAt: true },
     }),
   ]);
+
 
   const days: DayBucket[] = Array.from({ length: 14 }, (_, i) => {
     const date = new Date(since);

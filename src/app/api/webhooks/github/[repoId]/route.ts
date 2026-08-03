@@ -37,7 +37,7 @@ export async function POST(
 
   for (const task of matchingTasks) {
     const run = await createPendingRun(task.id, "WEBHOOK");
-    jobQueue.enqueue(() => executeRun(run.id));
+    jobQueue.enqueue(task.repoId, () => executeRun(run.id));
   }
 
   return NextResponse.json({ triggered: matchingTasks.length }, { status: 202 });

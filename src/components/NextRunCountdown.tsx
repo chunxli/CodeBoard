@@ -25,9 +25,12 @@ export default function NextRunCountdown({ nextRun }: { nextRun: string | null }
 
   useEffect(() => {
     if (!nextRun) return;
-    setTitle(new Date(nextRun).toLocaleString());
     const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    const titleTimer = setTimeout(() => setTitle(new Date(nextRun).toLocaleString()), 0);
+    return () => {
+      clearInterval(id);
+      clearTimeout(titleTimer);
+    };
   }, [nextRun]);
 
   if (!nextRun) return <span className="text-neutral-500">-</span>;

@@ -5,9 +5,9 @@ import { createPendingRun, executeRun } from "@/lib/task-executor";
 
 const activeJobs = new Map<string, { expression: string; job: ScheduledTask }>();
 
-async function triggerScheduledTask(taskId: string) {
+async function triggerScheduledTask(taskId: string, repoId: string) {
   const run = await createPendingRun(taskId, "SCHEDULE");
-  jobQueue.enqueue(() => executeRun(run.id));
+  jobQueue.enqueue(repoId, () => executeRun(run.id));
 }
 
 /** Reconciles active node-cron jobs with the current set of enabled SCHEDULE tasks in the DB. */
@@ -17,6 +17,7 @@ export async function syncSchedules() {
   });
 
   const desired = new Map(tasks.map((t) => [t.id, t.cronExpression!]));
+  const repoIdByTask = new Map(tasks.map((t) => [t.id, t.repoId]));
 
   for (const [taskId, entry] of activeJobs) {
     const wanted = desired.get(taskId);
@@ -33,11 +34,14 @@ export async function syncSchedules() {
       continue;
     }
     const job = cron.schedule(expression, () => {
-      triggerScheduledTask(taskId).catch((err) => console.error("[scheduler] trigger failed:", err));
+      triggerScheduledTask(taskId, repoIdByTask.get(taskId)!).catch((err) =>
+        console.error("[scheduler] trigger failed:", err)
+      );
     });
     activeJobs.set(taskId, { expression, job });
   }
 }
+
 
 let started = false;
 
