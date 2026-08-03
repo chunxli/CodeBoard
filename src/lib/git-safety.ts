@@ -42,33 +42,46 @@ export async function checkoutBranch(repoPath: string, branchName: string): Prom
 /**
  * Computes a run's diff against its repo's default branch, checking out that run's own
  * branch first (a shared repo workdir may currently sit on a different run's branch).
- * Skips (returns "") if another run on the same repo is currently active, since switching
- * branches out from under it would corrupt its live working tree.
+ * Reports `blocked: true` (diff: "") if another run on the same repo is currently active,
+ * since switching branches out from under it would corrupt its live working tree — the
+ * caller can use that to show a "temporarily unavailable" message rather than nothing.
  */
 export async function getRunDiff(run: {
   status: RunStatus;
   branchName: string | null;
   task: { repoId: string; repo: Repo };
-}): Promise<string> {
-  if (!run.branchName) return "";
+}): Promise<{ diff: string; blocked: boolean }> {
+  if (!run.branchName) return { diff: "", blocked: false };
   try {
     const repoPath = await resolveRepoWorkdir(run.task.repo);
     if (run.status !== "RUNNING" && run.status !== "PENDING") {
       const activeRun = await prisma.run.findFirst({
         where: { task: { repoId: run.task.repoId }, status: { in: ["RUNNING", "PENDING"] } },
       });
-      if (activeRun) return "";
+      if (activeRun) return { diff: "", blocked: true };
       await checkoutBranch(repoPath, run.branchName);
     }
-    return await getBranchDiff(repoPath, run.task.repo.defaultBranch);
+    const diff = await getBranchDiff(repoPath, run.task.repo.defaultBranch);
+    return { diff, blocked: false };
   } catch {
-    return "";
+    return { diff: "", blocked: false };
   }
 }
 
 export async function getCurrentBranch(repoPath: string): Promise<string> {
   const result = await runGit(["rev-parse", "--abbrev-ref", "HEAD"], repoPath);
   return result.stdout.trim();
+}
+
+/** The `origin` remote URL configured in the repo's workdir, or null if there isn't one (e.g. not cloned yet, or a local repo with no remote). */
+export async function getRemoteUrl(repoPath: string): Promise<string | null> {
+  try {
+    const result = await runGit(["config", "--get", "remote.origin.url"], repoPath);
+    const url = result.stdout.trim();
+    return result.code === 0 && url ? url : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function isGitRepo(repoPath: string): Promise<boolean> {

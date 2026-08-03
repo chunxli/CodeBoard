@@ -8,6 +8,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // structurally identical to `@prisma/client`'s `PrismaClient` but nominally a different type,
   // and `@prisma/client` itself has no generated output here (no default `PrismaClient` export).
   adapter: PrismaAdapter(prisma as never),
+  // Needed since the app runs behind a non-default host/port (e.g. localhost:3100) without AUTH_URL set.
+  trustHost: true,
 
   providers: [
     MicrosoftEntraID({

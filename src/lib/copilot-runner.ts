@@ -6,6 +6,11 @@ import pidusage from "pidusage";
 
 export const RUN_LOG_DIR = path.join(process.cwd(), "data", "runs");
 
+/** Deterministic per-run log file path, stable before the run even starts writing to it. */
+export function getRunLogPath(runId: string): string {
+  return path.join(RUN_LOG_DIR, `${runId}.log`);
+}
+
 export type RunPermissionMode = "default" | "full";
 export type RunOutputFormat = "text" | "json";
 
@@ -34,14 +39,32 @@ interface RunProcessStats {
   sampledAt: number;
 }
 
+// Pinned to globalThis (like jobQueue in job-queue.ts): in dev mode, route handlers can be
+// compiled into separate module instances, which would otherwise give the scheduler's run
+// and the SSE route handler two disconnected copies of this state.
+const globalForRunner = globalThis as unknown as {
+  copilotRunEmitters?: Map<string, EventEmitter>;
+  copilotRunProcesses?: Map<string, ChildProcessWithoutNullStreams>;
+  copilotCancelledRunIds?: Set<string>;
+  copilotRunStats?: Map<string, RunProcessStats>;
+};
+
 // One emitter per in-flight run; SSE endpoints subscribe to stream live output.
-const runEmitters = new Map<string, EventEmitter>();
+const runEmitters = globalForRunner.copilotRunEmitters ?? new Map<string, EventEmitter>();
 // In-flight child processes, keyed by runId, so a run can be cancelled on demand.
-const runProcesses = new Map<string, ChildProcessWithoutNullStreams>();
+const runProcesses =
+  globalForRunner.copilotRunProcesses ?? new Map<string, ChildProcessWithoutNullStreams>();
 // Runs that were explicitly cancelled, so their `close` handler reports it accurately.
-const cancelledRunIds = new Set<string>();
+const cancelledRunIds = globalForRunner.copilotCancelledRunIds ?? new Set<string>();
 // Latest pidusage sample per in-flight run, for the "process info" panel / live polling endpoint.
-const runStats = new Map<string, RunProcessStats>();
+const runStats = globalForRunner.copilotRunStats ?? new Map<string, RunProcessStats>();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForRunner.copilotRunEmitters = runEmitters;
+  globalForRunner.copilotRunProcesses = runProcesses;
+  globalForRunner.copilotCancelledRunIds = cancelledRunIds;
+  globalForRunner.copilotRunStats = runStats;
+}
 
 export function getRunEmitter(runId: string): EventEmitter | undefined {
   return runEmitters.get(runId);
@@ -97,7 +120,7 @@ export async function startCopilotRun(opts: StartCopilotRunOptions): Promise<{
   peakMemoryMb: number | null;
 }> {
   await mkdir(RUN_LOG_DIR, { recursive: true });
-  const logPath = path.join(RUN_LOG_DIR, `${opts.runId}.log`);
+  const logPath = getRunLogPath(opts.runId);
 
   const emitter = new EventEmitter();
   runEmitters.set(opts.runId, emitter);

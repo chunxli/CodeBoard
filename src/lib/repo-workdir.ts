@@ -25,6 +25,14 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 /**
+ * Working directory a repo resolves to, without any side effects (no cloning/mkdir) —
+ * safe to call just to display the path, even if it hasn't been cloned yet.
+ */
+export function getRepoWorkdirPath(repo: Pick<Repo, "sourceType" | "location" | "id">): string {
+  return repo.sourceType === "LOCAL_PATH" ? repo.location : path.join(CLONE_ROOT, repo.id);
+}
+
+/**
  * Resolves the working directory a task should run in: the repo's local path as-is
  * (cloning it first under data/repos/<repoId> if it's a GIT_URL repo that hasn't been
  * cloned yet). Read-only otherwise — does NOT switch branches or pull, so it's safe to

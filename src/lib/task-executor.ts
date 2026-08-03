@@ -2,7 +2,7 @@ import { hostname } from "node:os";
 import { prisma } from "@/lib/prisma";
 import { resolveRepoWorkdir, syncRepoToDefaultBranch } from "@/lib/repo-workdir";
 import { createSafeBranch, isGitRepo } from "@/lib/git-safety";
-import { startCopilotRun, type RunPermissionMode, type RunOutputFormat } from "@/lib/copilot-runner";
+import { startCopilotRun, getRunLogPath, type RunPermissionMode, type RunOutputFormat } from "@/lib/copilot-runner";
 import type { RunTrigger } from "@/generated/prisma/client";
 
 /** Creates the PENDING Run row up-front so callers can return its id immediately. */
@@ -42,6 +42,8 @@ export async function executeRun(runId: string): Promise<void> {
         startedAt: new Date(),
         outputFormat: task.outputFormat,
         hostname: hostname(),
+        // Set up-front (path is deterministic) so the run page can show partial output before it finishes.
+        logPath: getRunLogPath(run.id),
       },
     });
 

@@ -78,9 +78,35 @@ export default function LiveRunLog({
 
     connect();
 
+    // Safety net alongside SSE: periodically re-fetch the full persisted log and status
+    // directly, in case an event was missed (e.g. a dropped connection reconnecting mid-line,
+    // or any other gap) — this guarantees the view eventually matches what a manual reload shows,
+    // without requiring the user to actually reload.
+    const pollTimer = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const res = await fetch(`/api/runs/${runId}`);
+        if (!res.ok) return;
+        const data: { log?: string; status?: string } = await res.json();
+        if (typeof data.log === "string") {
+          setLines(data.log.split("\n").filter(Boolean));
+        }
+        if (data.status && data.status !== "PENDING" && data.status !== "RUNNING") {
+          stopped = true;
+          setFinished(true);
+          source.close();
+          clearInterval(pollTimer);
+          router.refresh();
+        }
+      } catch {
+        // Ignore transient fetch failures; the next tick will retry.
+      }
+    }, 4000);
+
     return () => {
       stopped = true;
       clearTimeout(reconnectTimer);
+      clearInterval(pollTimer);
       source.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

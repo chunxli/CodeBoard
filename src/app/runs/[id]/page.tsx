@@ -3,12 +3,14 @@ import { notFound, redirect } from "next/navigation";
 import { readFile } from "node:fs/promises";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/session";
-import { getRunDiff } from "@/lib/git-safety";
+import { getRunDiff, getRemoteUrl } from "@/lib/git-safety";
+import { getRepoWorkdirPath } from "@/lib/repo-workdir";
 import { formatDuration } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import LiveRunLog from "@/components/LiveRunLog";
 import CancelRunButton from "@/components/CancelRunButton";
 import ProcessInfoPanel from "@/components/ProcessInfoPanel";
+import RepoInfoPanel from "@/components/RepoInfoPanel";
 import DiffView from "@/components/DiffView";
 
 export default async function RunDetailPage({
@@ -28,7 +30,10 @@ export default async function RunDetailPage({
 
   const log = run.logPath ? await readFile(run.logPath, "utf8").catch(() => "") : "";
 
-  const diff = await getRunDiff(run);
+  const { diff, blocked: diffBlocked } = await getRunDiff(run);
+
+  const workdirPath = getRepoWorkdirPath(run.task.repo);
+  const remoteUrl = await getRemoteUrl(workdirPath);
 
   const isLive = run.status === "PENDING" || run.status === "RUNNING";
 
@@ -51,6 +56,15 @@ export default async function RunDetailPage({
         </p>
         {run.errorMessage && <p className="mt-2 text-sm text-red-400">{run.errorMessage}</p>}
       </div>
+
+      <RepoInfoPanel
+        info={{
+          currentBranch: run.branchName ?? run.task.repo.defaultBranch,
+          defaultBranch: run.task.repo.defaultBranch,
+          remoteUrl,
+          workdirPath,
+        }}
+      />
 
       <ProcessInfoPanel
         runId={run.id}
@@ -77,6 +91,12 @@ export default async function RunDetailPage({
         <div>
           <h2 className="mb-2 text-lg font-semibold">Diff (vs {run.task.repo.defaultBranch})</h2>
           <DiffView diff={diff} />
+        </div>
+      )}
+      {!diff && diffBlocked && (
+        <div className="rounded-lg border border-neutral-700 bg-neutral-800 p-4 text-sm text-neutral-400">
+          Diff temporarily unavailable — another run on this repo is currently in progress and using the
+          shared working directory. It'll reappear once that run finishes.
         </div>
       )}
     </div>

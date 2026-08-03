@@ -20,7 +20,7 @@ export async function GET(
 
   const log = run.logPath ? await readFile(run.logPath, "utf8").catch(() => "") : "";
 
-  const diff = await getRunDiff(run);
+  const { diff, blocked: diffBlocked } = await getRunDiff(run);
 
-  return NextResponse.json({ ...run, log, diff });
+  return NextResponse.json({ ...run, log, diff, diffBlocked });
 }
