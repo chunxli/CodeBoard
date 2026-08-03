@@ -30,7 +30,7 @@ export default async function RunDetailPage({
 
   const log = run.logPath ? await readFile(run.logPath, "utf8").catch(() => "") : "";
 
-  const { diff, blocked: diffBlocked } = await getRunDiff(run);
+  const diff = await getRunDiff(run);
 
   const workdirPath = getRepoWorkdirPath(run.task.repo);
   const remoteUrl = await getRemoteUrl(workdirPath);
@@ -74,6 +74,9 @@ export default async function RunDetailPage({
           command: run.command,
           cpuTimeMs: run.cpuTimeMs,
           memoryMb: run.peakMemoryMb,
+          model: run.model ?? run.task.model,
+          contextTier: run.contextTier ?? run.task.contextTier,
+          reasoningEffort: run.reasoningEffort ?? run.task.reasoningEffort,
         }}
       />
 
@@ -91,12 +94,6 @@ export default async function RunDetailPage({
         <div>
           <h2 className="mb-2 text-lg font-semibold">Diff (vs {run.task.repo.defaultBranch})</h2>
           <DiffView diff={diff} />
-        </div>
-      )}
-      {!diff && diffBlocked && (
-        <div className="rounded-lg border border-neutral-700 bg-neutral-800 p-4 text-sm text-neutral-400">
-          Diff temporarily unavailable — another run on this repo is currently in progress and using the
-          shared working directory. It'll reappear once that run finishes.
         </div>
       )}
     </div>

@@ -7,6 +7,9 @@ interface ProcessInfo {
   command: string | null;
   cpuTimeMs: number | null;
   memoryMb: number | null;
+  model?: string | null;
+  contextTier?: string | null;
+  reasoningEffort?: string | null;
 }
 
 function formatCpuTime(ms: number | null): string {
@@ -17,6 +20,21 @@ function formatCpuTime(ms: number | null): string {
   const seconds = Math.round(totalSeconds % 60);
   return `${minutes}m ${seconds}s`;
 }
+
+const CONTEXT_TIER_LABELS: Record<string, string> = {
+  default: "Default",
+  long_context: "Long context",
+};
+
+const REASONING_EFFORT_LABELS: Record<string, string> = {
+  none: "None",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "X-High",
+  max: "Max",
+};
 
 /** Process info panel: static for finished runs, polls the process endpoint every 3s while live. */
 export default function ProcessInfoPanel({
@@ -60,6 +78,22 @@ export default function ProcessInfoPanel({
         <div>
           <div className="text-neutral-500">内存占用</div>
           <div>{info.memoryMb != null ? `${info.memoryMb.toFixed(1)} MB` : "-"}</div>
+        </div>
+        <div>
+          <div className="text-neutral-500">Model</div>
+          <div className="font-mono">{info.model || "auto"}</div>
+        </div>
+        <div>
+          <div className="text-neutral-500">Context Size</div>
+          <div>{info.contextTier ? (CONTEXT_TIER_LABELS[info.contextTier] ?? info.contextTier) : "Default"}</div>
+        </div>
+        <div>
+          <div className="text-neutral-500">Think Effort</div>
+          <div>
+            {info.reasoningEffort
+              ? (REASONING_EFFORT_LABELS[info.reasoningEffort] ?? info.reasoningEffort)
+              : "-"}
+          </div>
         </div>
       </div>
       {info.command && (

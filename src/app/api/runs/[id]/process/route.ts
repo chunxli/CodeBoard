@@ -13,7 +13,15 @@ export async function GET(
   const { id } = await params;
   const run = await prisma.run.findFirst({
     where: { id, task: { repo: { userId } } },
-    select: { pid: true, command: true, cpuTimeMs: true, peakMemoryMb: true },
+    select: {
+      pid: true,
+      command: true,
+      cpuTimeMs: true,
+      peakMemoryMb: true,
+      model: true,
+      contextTier: true,
+      reasoningEffort: true,
+    },
   });
   if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -25,5 +33,8 @@ export async function GET(
     command: run.command,
     cpuTimeMs: live?.cpuTimeMs ?? run.cpuTimeMs,
     memoryMb: live?.memoryMb ?? run.peakMemoryMb,
+    model: run.model,
+    contextTier: run.contextTier,
+    reasoningEffort: run.reasoningEffort,
   });
 }

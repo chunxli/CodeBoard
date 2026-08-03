@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
-import { prisma } from "@/lib/prisma";
 import { resolveRepoWorkdir } from "@/lib/repo-workdir";
-import type { Repo, RunStatus } from "@/generated/prisma/client";
+import type { Repo } from "@/generated/prisma/client";
 
 function runGit(args: string[], cwd: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
@@ -25,46 +24,40 @@ export async function createSafeBranch(repoPath: string, runId: string, baseRef:
   return branchName;
 }
 
-/** Returns a unified diff of all changes made on the branch relative to the given base ref. */
-export async function getBranchDiff(repoPath: string, baseRef: string): Promise<string> {
-  const result = await runGit(["diff", baseRef], repoPath);
-  return result.stdout;
-}
-
-/** Checks out an existing branch (does not create it). */
-export async function checkoutBranch(repoPath: string, branchName: string): Promise<void> {
-  const result = await runGit(["checkout", branchName], repoPath);
-  if (result.code !== 0) {
-    throw new Error(`Failed to checkout branch ${branchName}: ${result.stderr}`);
-  }
+/** Commit SHA that `ref` currently points to in the given working tree, or null if it can't be resolved. */
+export async function getHeadCommit(repoPath: string, ref = "HEAD"): Promise<string | null> {
+  const result = await runGit(["rev-parse", ref], repoPath);
+  return result.code === 0 ? result.stdout.trim() : null;
 }
 
 /**
- * Computes a run's diff against its repo's default branch, checking out that run's own
- * branch first (a shared repo workdir may currently sit on a different run's branch).
- * Reports `blocked: true` (diff: "") if another run on the same repo is currently active,
- * since switching branches out from under it would corrupt its live working tree — the
- * caller can use that to show a "temporarily unavailable" message rather than nothing.
+ * Returns a unified diff between two refs/commits. A plain two-ref diff only reads committed
+ * history and never touches the working tree or index, so it's safe to run even while another
+ * run is concurrently checked out to something else in the same shared workdir.
+ */
+export async function getBranchDiff(repoPath: string, fromRef: string, toRef: string): Promise<string> {
+  const result = await runGit(["diff", fromRef, toRef], repoPath);
+  return result.stdout;
+}
+
+/**
+ * Computes a run's diff as `baseCommit..target`, where `target` is the run's own branch if it
+ * used one, or the repo's default branch if it committed directly to it (useSafeBranch off).
+ * `baseCommit` is the commit the default branch was at right before the run started. No
+ * checkout involved, so this works regardless of what else is currently active on the repo.
  */
 export async function getRunDiff(run: {
-  status: RunStatus;
   branchName: string | null;
-  task: { repoId: string; repo: Repo };
-}): Promise<{ diff: string; blocked: boolean }> {
-  if (!run.branchName) return { diff: "", blocked: false };
+  baseCommit: string | null;
+  task: { repo: Repo };
+}): Promise<string> {
+  if (!run.baseCommit) return "";
   try {
     const repoPath = await resolveRepoWorkdir(run.task.repo);
-    if (run.status !== "RUNNING" && run.status !== "PENDING") {
-      const activeRun = await prisma.run.findFirst({
-        where: { task: { repoId: run.task.repoId }, status: { in: ["RUNNING", "PENDING"] } },
-      });
-      if (activeRun) return { diff: "", blocked: true };
-      await checkoutBranch(repoPath, run.branchName);
-    }
-    const diff = await getBranchDiff(repoPath, run.task.repo.defaultBranch);
-    return { diff, blocked: false };
+    const target = run.branchName ?? run.task.repo.defaultBranch;
+    return await getBranchDiff(repoPath, run.baseCommit, target);
   } catch {
-    return { diff: "", blocked: false };
+    return "";
   }
 }
 

@@ -20,6 +20,8 @@ export interface StartCopilotRunOptions {
   prompt: string;
   agent?: string | null;
   model?: string | null;
+  contextTier?: string | null;
+  reasoningEffort?: string | null;
   permissionMode?: RunPermissionMode;
   outputFormat?: RunOutputFormat;
   timeoutSeconds?: number;
@@ -98,6 +100,8 @@ function buildArgs(opts: StartCopilotRunOptions): string[] {
 
   if (opts.agent) args.push("--agent", opts.agent);
   if (opts.model) args.push("--model", opts.model);
+  if (opts.contextTier) args.push("--context", opts.contextTier);
+  if (opts.reasoningEffort) args.push("--effort", opts.reasoningEffort);
 
   // Auto-redact common credential env vars from captured output.
   args.push("--secret-env-vars", "GH_TOKEN,GITHUB_TOKEN");

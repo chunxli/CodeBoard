@@ -69,6 +69,10 @@ model Task {
   prompt          String
   agent           String?
   model           String?
+  // Copilot CLI --context: "default" | "long_context"
+  contextTier     String?
+  // Copilot CLI --effort/--reasoning-effort: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+  reasoningEffort String?
   // Copilot CLI permission mode, e.g. "allow-all" | "default"
   permissionMode  String        @default("default")
   // Copilot CLI --output-format: "text" (readable) or "json" (raw JSONL event stream)
@@ -99,10 +103,20 @@ model Run {
   status       RunStatus  @default(PENDING)
   trigger      RunTrigger
   branchName   String?
+  // Commit SHA of the default branch right before this run started (captured after syncing to
+  // it, before any safe branch is created) — lets getRunDiff compute a two-ref diff without
+  // ever checking anything out, whether the run committed to its own branch or straight to the
+  // default branch (when useSafeBranch is off).
+  baseCommit   String?
   logPath      String?
   // Output format actually used for this run (copied from the Task at start time, since the
   // Task's setting could change later and the log's format shouldn't be reinterpreted).
   outputFormat String?
+  // Model / context tier / reasoning effort actually used for this run, copied from the Task at
+  // start time for the same reason as outputFormat above.
+  model           String?
+  contextTier     String?
+  reasoningEffort String?
   exitCode     Int?
   errorMessage String?
   startedAt    DateTime?

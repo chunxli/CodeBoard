@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Repo } from "@/generated/prisma/client";
 import CronScheduleInput from "@/components/CronScheduleInput";
@@ -20,6 +20,10 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
   const [prompt, setPrompt] = useState("");
   const [agent, setAgent] = useState("");
   const [model, setModel] = useState("");
+  const [contextTier, setContextTier] = useState<"" | "default" | "long_context">("");
+  const [reasoningEffort, setReasoningEffort] = useState<
+    "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+  >("");
   const [permissionMode, setPermissionMode] = useState<"default" | "full">("default");
   const [outputFormat, setOutputFormat] = useState<"text" | "json">("text");
   const [triggerType, setTriggerType] = useState<"MANUAL" | "SCHEDULE" | "WEBHOOK" | "API">("MANUAL");
@@ -29,6 +33,14 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
   const [timeoutSeconds, setTimeoutSeconds] = useState(1800);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/copilot/models")
+      .then((res) => (res.ok ? res.json() : { models: [] }))
+      .then((data: { models?: string[] }) => setAvailableModels(data.models ?? []))
+      .catch(() => {});
+  }, []);
 
   function onPromptChange(next: string) {
     setPrompt(next);
@@ -49,6 +61,8 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
           prompt,
           agent: agent || null,
           model: model || null,
+          contextTier: contextTier || null,
+          reasoningEffort: reasoningEffort || null,
           permissionMode,
           outputFormat,
           triggerType,
@@ -133,7 +147,7 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
 
       <details className="rounded border border-neutral-600 bg-neutral-900/40 p-3">
         <summary className="cursor-pointer select-none text-sm font-medium text-neutral-300">
-          高级选项（Agent / Model / 权限 / 分支策略 / 超时）
+          高级选项（Agent / Model / Context / Effort / 权限 / 分支策略 / 超时）
         </summary>
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -143,12 +157,43 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
               value={agent}
               onChange={(e) => setAgent(e.target.value)}
             />
-            <input
+            <select
               className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
-              placeholder="Model (optional)"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-            />
+            >
+              <option value="">Model：auto（让 Copilot 自动选择）</option>
+              {availableModels.map((m) => (
+                <option key={m} value={m}>
+                  Model：{m}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
+              value={contextTier}
+              onChange={(e) => setContextTier(e.target.value as typeof contextTier)}
+            >
+              <option value="">Context Size：默认</option>
+              <option value="default">Context Size：default</option>
+              <option value="long_context">Context Size：long_context</option>
+            </select>
+            <select
+              className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
+              value={reasoningEffort}
+              onChange={(e) => setReasoningEffort(e.target.value as typeof reasoningEffort)}
+            >
+              <option value="">Think Effort：默认</option>
+              <option value="none">Think Effort：none</option>
+              <option value="minimal">Think Effort：minimal</option>
+              <option value="low">Think Effort：low</option>
+              <option value="medium">Think Effort：medium</option>
+              <option value="high">Think Effort：high</option>
+              <option value="xhigh">Think Effort：xhigh</option>
+              <option value="max">Think Effort：max</option>
+            </select>
           </div>
           <select
             className="w-full rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"

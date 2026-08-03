@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { prisma } from "@/lib/prisma";
 import { resolveRepoWorkdir, syncRepoToDefaultBranch } from "@/lib/repo-workdir";
-import { createSafeBranch, isGitRepo } from "@/lib/git-safety";
+import { createSafeBranch, getHeadCommit, isGitRepo } from "@/lib/git-safety";
 import { startCopilotRun, getRunLogPath, type RunPermissionMode, type RunOutputFormat } from "@/lib/copilot-runner";
 import type { RunTrigger } from "@/generated/prisma/client";
 
@@ -29,6 +29,7 @@ export async function executeRun(runId: string): Promise<void> {
     const repoPath = await resolveRepoWorkdir(task.repo);
     await syncRepoToDefaultBranch(task.repo, repoPath);
     let branchName: string | null = null;
+    const baseCommit = await getHeadCommit(repoPath);
 
     if (task.useSafeBranch && (await isGitRepo(repoPath))) {
       branchName = await createSafeBranch(repoPath, run.id, task.repo.defaultBranch);
@@ -39,8 +40,12 @@ export async function executeRun(runId: string): Promise<void> {
       data: {
         status: "RUNNING",
         branchName,
+        baseCommit,
         startedAt: new Date(),
         outputFormat: task.outputFormat,
+        model: task.model,
+        contextTier: task.contextTier,
+        reasoningEffort: task.reasoningEffort,
         hostname: hostname(),
         // Set up-front (path is deterministic) so the run page can show partial output before it finishes.
         logPath: getRunLogPath(run.id),
@@ -56,6 +61,8 @@ export async function executeRun(runId: string): Promise<void> {
       prompt: task.prompt,
       agent: task.agent,
       model: task.model,
+      contextTier: task.contextTier,
+      reasoningEffort: task.reasoningEffort,
       permissionMode,
       outputFormat,
       timeoutSeconds: task.timeoutSeconds,
