@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum RepoSourceType {
+  LOCAL_PATH
+  GIT_URL
+}
+
+enum TriggerType {
+  MANUAL
+  SCHEDULE
+  WEBHOOK
+  API
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  TIMED_OUT
+  CANCELLED
+}
+
+enum RunTrigger {
+  MANUAL
+  SCHEDULE
+  WEBHOOK
+  API
+}
+
+model Repo {
+  id          String         @id @default(cuid())
+  name        String
+  sourceType  RepoSourceType
+  // Absolute local path (LOCAL_PATH) or git remote URL (GIT_URL)
+  location    String
+  defaultBranch String       @default("main")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tasks       Task[]
+  webhooks    WebhookConfig[]
+
+  @@unique([sourceType, location])
+}
+
+model Task {
+  id              String        @id @default(cuid())
+  name            String
+  repoId          String
+  repo            Repo          @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  prompt          String
+  agent           String?
+  model           String?
+  // Copilot CLI permission mode, e.g. "allow-all" | "default"
+  permissionMode  String        @default("default")
+  // Copilot CLI --output-format: "text" (readable) or "json" (raw JSONL event stream)
+  outputFormat    String        @default("text")
+  triggerType     TriggerType
+  cronExpression  String?
+  // Comma-separated GitHub event types this task responds to when triggerType = WEBHOOK
+  webhookEvents   String?
+  enabled         Boolean       @default(true)
+  // Create a fresh branch per run instead of touching the default branch directly
+  useSafeBranch   Boolean       @default(true)
+  timeoutSeconds  Int           @default(1800)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  runs            Run[]
+
+  @@index([repoId])
+}
+
+model Run {
+  id           String     @id @default(cuid())
+  taskId       String
+  task         Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  status       RunStatus  @default(PENDING)
+  trigger      RunTrigger
+  branchName   String?
+  logPath      String?
+  // Output format actually used for this run (copied from the Task at start time, since the
+  // Task's setting could change later and the log's format shouldn't be reinterpreted).
+  outputFormat String?
+  exitCode     Int?
+  errorMessage String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  // Process info, best-effort — populated when the copilot CLI child process spawns/exits.
+  pid          Int?
+  command      String?
+  // Cumulative CPU time in ms and last-observed resident memory, from the most recent
+  // pidusage sample taken while the process was alive (not available after the process exits).
+  cpuTimeMs    Int?
+  peakMemoryMb Float?
+
+  @@index([taskId])
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  name       String
+  // SHA-256 hash of the token; the raw token is only shown once at creation time
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+}
+
+model WebhookConfig {
+  id            String   @id @default(cuid())
+  repoId        String   @unique
+  repo          Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  // Shared secret used to verify the GitHub webhook HMAC signature (must be readable to
+  // compute/verify HMAC, unlike a login password — treat this DB file as sensitive).
+  secret        String
+  createdAt     DateTime @default(now())
+
+  @@index([repoId])
+}

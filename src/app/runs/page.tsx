@@ -1,0 +1,118 @@
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import type { RunStatus } from "@/generated/prisma/client";
+import StatusBadge from "@/components/StatusBadge";
+import RunStatusFilter from "@/components/RunStatusFilter";
+import CancelRunButton from "@/components/CancelRunButton";
+import { formatDuration } from "@/lib/format";
+
+const PAGE_SIZE = 20;
+const VALID_STATUSES = new Set(["PENDING", "RUNNING", "SUCCESS", "FAILED", "TIMED_OUT", "CANCELLED"]);
+
+export default async function RunsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; page?: string }>;
+}) {
+  const { status, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const where = status && VALID_STATUSES.has(status) ? { status: status as RunStatus } : undefined;
+
+  const [runs, total] = await Promise.all([
+    prisma.run.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: { task: { select: { id: true, name: true } } },
+    }),
+    prisma.run.count({ where }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const query = status ? `&status=${status}` : "";
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Runs</h1>
+        <RunStatusFilter />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-neutral-700">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-800 text-left text-neutral-400">
+            <tr>
+              <th className="px-4 py-2">Task</th>
+              <th className="px-4 py-2">Trigger</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Started</th>
+              <th className="px-4 py-2">Duration</th>
+              <th className="px-4 py-2">PID</th>
+              <th className="px-4 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((run) => {
+              const isLive = run.status === "PENDING" || run.status === "RUNNING";
+              return (
+                <tr key={run.id} className="border-t border-neutral-700 hover:bg-neutral-800/50">
+                  <td className="px-4 py-2">
+                    <Link href={`/runs/${run.id}`} className="text-blue-400 hover:underline">
+                      {run.task.name}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2 text-neutral-400">{run.trigger}</td>
+                  <td className="px-4 py-2">
+                    <StatusBadge status={run.status} />
+                  </td>
+                  <td className="px-4 py-2 text-neutral-400">
+                    {run.startedAt ? new Date(run.startedAt).toLocaleString() : "-"}
+                  </td>
+                  <td className="px-4 py-2 text-neutral-400">
+                    {formatDuration(run.startedAt, run.finishedAt)}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-neutral-400">{run.pid ?? "-"}</td>
+                  <td className="px-4 py-2 text-right">{isLive && <CancelRunButton runId={run.id} />}</td>
+                </tr>
+              );
+            })}
+            {runs.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-neutral-500">
+                  No runs found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-neutral-400">
+          <span>
+            Page {page} of {totalPages} ({total} runs)
+          </span>
+          <div className="flex gap-2">
+            <Link
+              href={`/runs?page=${page - 1}${query}`}
+              aria-disabled={page <= 1}
+              className={`rounded border border-neutral-600 px-3 py-1 hover:bg-neutral-800 ${
+                page <= 1 ? "pointer-events-none opacity-40" : ""
+              }`}
+            >
+              Prev
+            </Link>
+            <Link
+              href={`/runs?page=${page + 1}${query}`}
+              aria-disabled={page >= totalPages}
+              className={`rounded border border-neutral-600 px-3 py-1 hover:bg-neutral-800 ${
+                page >= totalPages ? "pointer-events-none opacity-40" : ""
+              }`}
+            >
+              Next
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

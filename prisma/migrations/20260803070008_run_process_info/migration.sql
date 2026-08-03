@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Run" ADD COLUMN "command" TEXT;
+ALTER TABLE "Run" ADD COLUMN "cpuTimeMs" INTEGER;
+ALTER TABLE "Run" ADD COLUMN "peakMemoryMb" REAL;
+ALTER TABLE "Run" ADD COLUMN "pid" INTEGER;
