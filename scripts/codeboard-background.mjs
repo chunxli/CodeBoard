@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createConnection } from "node:net";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -13,7 +20,13 @@ const stdoutLog = path.join(dataDir, "codeboard.out.log");
 const stderrLog = path.join(dataDir, "codeboard.err.log");
 const port = 3100;
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
-const prismaBin = path.join(root, "node_modules", "prisma", "build", "index.js");
+const prismaBin = path.join(
+  root,
+  "node_modules",
+  "prisma",
+  "build",
+  "index.js",
+);
 const action = process.argv[2]?.toLowerCase();
 const skipBuild = process.argv.includes("--skip-build");
 
@@ -52,18 +65,62 @@ function processCommand(pid) {
         "-Command",
         `(Get-CimInstance Win32_Process -Filter \"ProcessId = ${pid}\").CommandLine`,
       ],
-      { encoding: "utf8", windowsHide: true }
+      { encoding: "utf8", windowsHide: true },
     );
     return result.stdout?.trim() ?? "";
   }
 
-  const result = spawnSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" });
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "command="], {
+    encoding: "utf8",
+  });
   return result.stdout?.trim() ?? "";
+}
+
+function processCwd(pid) {
+  if (process.platform === "win32") return "";
+  const result = spawnSync(
+    "lsof",
+    ["-a", "-p", String(pid), "-d", "cwd", "-Fn"],
+    {
+      encoding: "utf8",
+    },
+  );
+  return (
+    result.stdout
+      ?.split(/\r?\n/)
+      .find((line) => line.startsWith("n"))
+      ?.slice(1) ?? ""
+  );
 }
 
 function isCodeBoardProcess(pid) {
   const command = processCommand(pid).replaceAll("\\", "/").toLowerCase();
-  return command.includes("next/dist/bin/next") && command.includes(" start ") && command.includes("-p 3100");
+  if (
+    command.includes("next/dist/bin/next") &&
+    command.includes(" start ") &&
+    command.includes("-p 3100")
+  ) {
+    return true;
+  }
+  return (
+    process.platform !== "win32" &&
+    command.includes("next-server") &&
+    processCwd(pid) === root
+  );
+}
+
+function portOwnerPid() {
+  if (process.platform === "win32") return null;
+  const result = spawnSync("lsof", ["-tiTCP:" + port, "-sTCP:LISTEN"], {
+    encoding: "utf8",
+  });
+  const pid = Number.parseInt(result.stdout?.trim().split(/\s+/)[0] ?? "", 10);
+  return Number.isInteger(pid) ? pid : null;
+}
+
+function unmanagedCodeBoardPid() {
+  const pid = portOwnerPid();
+  return pid && isAlive(pid) && isCodeBoardProcess(pid) ? pid : null;
 }
 
 function portIsOpen() {
@@ -96,13 +153,24 @@ async function start() {
   mkdirSync(dataDir, { recursive: true });
   const existing = readPid();
   if (existing && isAlive(existing.pid) && isCodeBoardProcess(existing.pid)) {
-    console.log(`CodeBoard is already running (PID ${existing.pid}) at http://localhost:${port}.`);
+    console.log(
+      `CodeBoard is already running (PID ${existing.pid}) at http://localhost:${port}.`,
+    );
     return;
   }
   if (existing) rmSync(pidFile, { force: true });
 
   if (await portIsOpen()) {
-    console.error(`Port ${port} is already in use. Stop that process before starting CodeBoard.`);
+    const pid = unmanagedCodeBoardPid();
+    if (pid) {
+      console.log(
+        `CodeBoard is already running (PID ${pid}) at http://localhost:${port}; it is not managed by the background script.`,
+      );
+      return;
+    }
+    console.error(
+      `Port ${port} is already in use. Stop that process before starting CodeBoard.`,
+    );
     process.exit(1);
   }
 
@@ -117,26 +185,36 @@ async function start() {
 
   const stdout = openSync(stdoutLog, "a");
   const stderr = openSync(stderrLog, "a");
-  const child = spawn(process.execPath, [nextBin, "start", "-p", String(port)], {
-    cwd: root,
-    detached: true,
-    windowsHide: true,
-    stdio: ["ignore", stdout, stderr],
-    env: process.env,
-  });
+  const child = spawn(
+    process.execPath,
+    [nextBin, "start", "-p", String(port)],
+    {
+      cwd: root,
+      detached: true,
+      windowsHide: true,
+      stdio: ["ignore", stdout, stderr],
+      env: process.env,
+    },
+  );
   child.unref();
   closeSync(stdout);
   closeSync(stderr);
 
   writeFileSync(
     pidFile,
-    JSON.stringify({ pid: child.pid, startedAt: new Date().toISOString(), port }, null, 2) + "\n"
+    JSON.stringify(
+      { pid: child.pid, startedAt: new Date().toISOString(), port },
+      null,
+      2,
+    ) + "\n",
   );
 
   if (!(await waitForPort(true, 15_000))) {
     if (isAlive(child.pid) && isCodeBoardProcess(child.pid)) {
       if (process.platform === "win32") {
-        spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+        spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+          windowsHide: true,
+        });
       } else {
         process.kill(-child.pid, "SIGTERM");
       }
@@ -146,13 +224,22 @@ async function start() {
     process.exit(1);
   }
 
-  console.log(`CodeBoard started in the background (PID ${child.pid}) at http://localhost:${port}.`);
+  console.log(
+    `CodeBoard started in the background (PID ${child.pid}) at http://localhost:${port}.`,
+  );
   console.log(`Logs: ${stdoutLog} and ${stderrLog}`);
 }
 
 async function stop() {
   const state = readPid();
   if (!state) {
+    const pid = unmanagedCodeBoardPid();
+    if (pid) {
+      console.log(
+        `CodeBoard is running (PID ${pid}) but is not managed by the background script. Stop it from its original terminal.`,
+      );
+      return;
+    }
     console.log("CodeBoard is not running (no PID file found).\n");
     return;
   }
@@ -162,16 +249,23 @@ async function stop() {
     return;
   }
   if (!isCodeBoardProcess(state.pid)) {
-    console.error(`PID ${state.pid} is not a CodeBoard process; refusing to stop it.`);
+    console.error(
+      `PID ${state.pid} is not a CodeBoard process; refusing to stop it.`,
+    );
     process.exit(1);
   }
 
   if (process.platform === "win32") {
-    const result = spawnSync("taskkill.exe", ["/PID", String(state.pid), "/T", "/F"], {
-      stdio: "inherit",
-      windowsHide: true,
-    });
-    if (result.status !== 0 && isAlive(state.pid)) process.exit(result.status ?? 1);
+    const result = spawnSync(
+      "taskkill.exe",
+      ["/PID", String(state.pid), "/T", "/F"],
+      {
+        stdio: "inherit",
+        windowsHide: true,
+      },
+    );
+    if (result.status !== 0 && isAlive(state.pid))
+      process.exit(result.status ?? 1);
   } else {
     try {
       process.kill(-state.pid, "SIGTERM");
@@ -194,10 +288,19 @@ async function stop() {
 function status() {
   const state = readPid();
   if (state && isAlive(state.pid) && isCodeBoardProcess(state.pid)) {
-    console.log(`CodeBoard is running (PID ${state.pid}) at http://localhost:${state.port ?? port}.`);
+    console.log(
+      `CodeBoard is running (PID ${state.pid}) at http://localhost:${state.port ?? port}.`,
+    );
     return;
   }
   if (state) rmSync(pidFile, { force: true });
+  const pid = unmanagedCodeBoardPid();
+  if (pid) {
+    console.log(
+      `CodeBoard is running (PID ${pid}) at http://localhost:${port} (not managed by the background script).`,
+    );
+    return;
+  }
   console.log("CodeBoard is not running.");
 }
 
@@ -210,7 +313,13 @@ function logs() {
   ]) {
     console.log(`\n--- ${label} (last 40 lines) ---`);
     try {
-      console.log(readFileSync(file, "utf8").trimEnd().split(/\r?\n/).slice(-40).join("\n"));
+      console.log(
+        readFileSync(file, "utf8")
+          .trimEnd()
+          .split(/\r?\n/)
+          .slice(-40)
+          .join("\n"),
+      );
     } catch {
       console.log(`No ${label} log yet.`);
     }
@@ -231,6 +340,8 @@ switch (action) {
     logs();
     break;
   default:
-    console.error("Usage: node scripts/codeboard-background.mjs <start|stop|status|logs> [--skip-build]");
+    console.error(
+      "Usage: node scripts/codeboard-background.mjs <start|stop|status|logs> [--skip-build]",
+    );
     process.exit(1);
 }
