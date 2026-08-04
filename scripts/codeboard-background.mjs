@@ -1,0 +1,236 @@
+#!/usr/bin/env node
+
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
+import path from "node:path";
+import { spawn, spawnSync } from "node:child_process";
+import process from "node:process";
+
+const root = path.resolve(import.meta.dirname, "..");
+const dataDir = path.join(root, "data");
+const pidFile = path.join(dataDir, "codeboard.pid.json");
+const stdoutLog = path.join(dataDir, "codeboard.out.log");
+const stderrLog = path.join(dataDir, "codeboard.err.log");
+const port = 3100;
+const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
+const prismaBin = path.join(root, "node_modules", "prisma", "build", "index.js");
+const action = process.argv[2]?.toLowerCase();
+const skipBuild = process.argv.includes("--skip-build");
+
+function run(command, args) {
+  const result = spawnSync(command, args, { cwd: root, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function readPid() {
+  try {
+    const state = JSON.parse(readFileSync(pidFile, "utf8"));
+    return Number.isInteger(state.pid) ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function processCommand(pid) {
+  if (process.platform === "win32") {
+    const result = spawnSync(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `(Get-CimInstance Win32_Process -Filter \"ProcessId = ${pid}\").CommandLine`,
+      ],
+      { encoding: "utf8", windowsHide: true }
+    );
+    return result.stdout?.trim() ?? "";
+  }
+
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" });
+  return result.stdout?.trim() ?? "";
+}
+
+function isCodeBoardProcess(pid) {
+  const command = processCommand(pid).replaceAll("\\", "/").toLowerCase();
+  return command.includes("next/dist/bin/next") && command.includes(" start ") && command.includes("-p 3100");
+}
+
+function portIsOpen() {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: "127.0.0.1", port });
+    socket.setTimeout(500);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    const close = () => {
+      socket.destroy();
+      resolve(false);
+    };
+    socket.once("error", close);
+    socket.once("timeout", close);
+  });
+}
+
+async function waitForPort(expectedOpen, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await portIsOpen()) === expectedOpen) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+}
+
+async function start() {
+  mkdirSync(dataDir, { recursive: true });
+  const existing = readPid();
+  if (existing && isAlive(existing.pid) && isCodeBoardProcess(existing.pid)) {
+    console.log(`CodeBoard is already running (PID ${existing.pid}) at http://localhost:${port}.`);
+    return;
+  }
+  if (existing) rmSync(pidFile, { force: true });
+
+  if (await portIsOpen()) {
+    console.error(`Port ${port} is already in use. Stop that process before starting CodeBoard.`);
+    process.exit(1);
+  }
+
+  if (!skipBuild) {
+    console.log("[CodeBoard] Generating Prisma client...");
+    run(process.execPath, [prismaBin, "generate"]);
+    console.log("[CodeBoard] Applying database migrations...");
+    run(process.execPath, [prismaBin, "migrate", "deploy"]);
+    console.log("[CodeBoard] Building release...");
+    run(process.execPath, [nextBin, "build"]);
+  }
+
+  const stdout = openSync(stdoutLog, "a");
+  const stderr = openSync(stderrLog, "a");
+  const child = spawn(process.execPath, [nextBin, "start", "-p", String(port)], {
+    cwd: root,
+    detached: true,
+    windowsHide: true,
+    stdio: ["ignore", stdout, stderr],
+    env: process.env,
+  });
+  child.unref();
+  closeSync(stdout);
+  closeSync(stderr);
+
+  writeFileSync(
+    pidFile,
+    JSON.stringify({ pid: child.pid, startedAt: new Date().toISOString(), port }, null, 2) + "\n"
+  );
+
+  if (!(await waitForPort(true, 15_000))) {
+    if (isAlive(child.pid) && isCodeBoardProcess(child.pid)) {
+      if (process.platform === "win32") {
+        spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+      } else {
+        process.kill(-child.pid, "SIGTERM");
+      }
+    }
+    rmSync(pidFile, { force: true });
+    console.error(`CodeBoard did not start. Check ${stderrLog}.`);
+    process.exit(1);
+  }
+
+  console.log(`CodeBoard started in the background (PID ${child.pid}) at http://localhost:${port}.`);
+  console.log(`Logs: ${stdoutLog} and ${stderrLog}`);
+}
+
+async function stop() {
+  const state = readPid();
+  if (!state) {
+    console.log("CodeBoard is not running (no PID file found).\n");
+    return;
+  }
+  if (!isAlive(state.pid)) {
+    rmSync(pidFile, { force: true });
+    console.log("CodeBoard was not running; removed its stale PID file.");
+    return;
+  }
+  if (!isCodeBoardProcess(state.pid)) {
+    console.error(`PID ${state.pid} is not a CodeBoard process; refusing to stop it.`);
+    process.exit(1);
+  }
+
+  if (process.platform === "win32") {
+    const result = spawnSync("taskkill.exe", ["/PID", String(state.pid), "/T", "/F"], {
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    if (result.status !== 0 && isAlive(state.pid)) process.exit(result.status ?? 1);
+  } else {
+    try {
+      process.kill(-state.pid, "SIGTERM");
+    } catch {
+      process.kill(state.pid, "SIGTERM");
+    }
+    if (!(await waitForPort(false, 8_000)) && isAlive(state.pid)) {
+      try {
+        process.kill(-state.pid, "SIGKILL");
+      } catch {
+        process.kill(state.pid, "SIGKILL");
+      }
+    }
+  }
+
+  rmSync(pidFile, { force: true });
+  console.log("CodeBoard stopped.");
+}
+
+function status() {
+  const state = readPid();
+  if (state && isAlive(state.pid) && isCodeBoardProcess(state.pid)) {
+    console.log(`CodeBoard is running (PID ${state.pid}) at http://localhost:${state.port ?? port}.`);
+    return;
+  }
+  if (state) rmSync(pidFile, { force: true });
+  console.log("CodeBoard is not running.");
+}
+
+function logs() {
+  console.log(`stdout: ${stdoutLog}`);
+  console.log(`stderr: ${stderrLog}`);
+  for (const [label, file] of [
+    ["stdout", stdoutLog],
+    ["stderr", stderrLog],
+  ]) {
+    console.log(`\n--- ${label} (last 40 lines) ---`);
+    try {
+      console.log(readFileSync(file, "utf8").trimEnd().split(/\r?\n/).slice(-40).join("\n"));
+    } catch {
+      console.log(`No ${label} log yet.`);
+    }
+  }
+}
+
+switch (action) {
+  case "start":
+    await start();
+    break;
+  case "stop":
+    await stop();
+    break;
+  case "status":
+    status();
+    break;
+  case "logs":
+    logs();
+    break;
+  default:
+    console.error("Usage: node scripts/codeboard-background.mjs <start|stop|status|logs> [--skip-build]");
+    process.exit(1);
+}

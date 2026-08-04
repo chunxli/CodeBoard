@@ -59,6 +59,24 @@ npm run start              # runs `next start -p 3100` — serves the build, no 
 
 The `node-cron` scheduler starts automatically in both dev and production mode, as long as the process keeps running — see [Scheduling notes](#scheduling-notes) below.
 
+### Run the Release in the background
+
+The same commands work in PowerShell/Command Prompt on Windows and Terminal on macOS. The start command generates Prisma, applies migrations, builds the release, then launches CodeBoard detached from the terminal with output redirected to `data/`:
+
+```bash
+npm run background:start
+```
+
+The terminal can be closed after the command reports that CodeBoard started. Manage the detached process with:
+
+```bash
+npm run background:status
+npm run background:logs
+npm run background:stop
+```
+
+After the first build, use `npm run background:start:fast` to restart the existing release without rebuilding it. Run the full `background:start` command again after pulling code, changing dependencies, or adding migrations.
+
 ## Authentication setup
 
 CodeBoard requires signing in with a Microsoft account before any UI page or API route (other than the auth, GitHub webhook, and external-trigger endpoints) becomes accessible. This needs a Microsoft Entra ID app registration:
