@@ -24,10 +24,18 @@ export const createTaskSchema = z.object({
   webhookEvents: z.string().max(500).nullish(),
   enabled: z.boolean().default(true),
   useSafeBranch: z.boolean().default(true),
+  waitForPreviousRuns: z.boolean().default(false),
   timeoutSeconds: z.number().int().min(30).max(86400).default(1800),
 });
 
-export const updateTaskSchema = createTaskSchema.partial();
+export const updateTaskSchema = createTaskSchema.partial().extend({
+  permissionMode: z.enum(["default", "full"]).optional(),
+  outputFormat: z.enum(["text", "json"]).optional(),
+  enabled: z.boolean().optional(),
+  useSafeBranch: z.boolean().optional(),
+  waitForPreviousRuns: z.boolean().optional(),
+  timeoutSeconds: z.number().int().min(30).max(86400).optional(),
+});
 
 export const createWebhookSchema = z.object({
   repoId: z.string().min(1),

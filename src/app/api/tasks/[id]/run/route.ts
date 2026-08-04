@@ -16,7 +16,7 @@ export async function POST(
   if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
 
   const run = await createPendingRun(task.id, "MANUAL");
-  jobQueue.enqueue(task.repoId, () => executeRun(run.id));
+  jobQueue.enqueue(task.repoId, () => executeRun(run.id), task.waitForPreviousRuns);
 
   return NextResponse.json({ runId: run.id }, { status: 202 });
 }

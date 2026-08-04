@@ -42,6 +42,7 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
   const [webhookEvents, setWebhookEvents] = useState(task.webhookEvents ?? "");
   const [enabled, setEnabled] = useState(task.enabled);
   const [useSafeBranch, setUseSafeBranch] = useState(task.useSafeBranch);
+  const [waitForPreviousRuns, setWaitForPreviousRuns] = useState(task.waitForPreviousRuns);
   const [timeoutSeconds, setTimeoutSeconds] = useState(task.timeoutSeconds);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -77,6 +78,7 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
           webhookEvents: triggerType === "WEBHOOK" ? webhookEvents : null,
           enabled,
           useSafeBranch,
+          waitForPreviousRuns,
           timeoutSeconds,
         }),
       });
@@ -151,6 +153,21 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
           onChange={(e) => setEnabled(e.target.checked)}
         />
         Enabled (schedule/webhook triggers only fire while enabled)
+      </label>
+
+      <label className="flex items-start gap-2 text-sm text-neutral-300">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={waitForPreviousRuns}
+          onChange={(e) => setWaitForPreviousRuns(e.target.checked)}
+        />
+        <span>
+          等待此前所有 Run 完成后再开始
+          <span className="block text-xs text-neutral-500">
+            启用后此 Run 全局串行执行；同一 Repo 的 Run 无论此项是否启用都会串行。
+          </span>
+        </span>
       </label>
 
       <details className="rounded border border-neutral-600 bg-neutral-900/40 p-3">

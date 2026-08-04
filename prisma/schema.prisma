@@ -84,6 +84,8 @@ model Task {
   enabled         Boolean       @default(true)
   // Create a fresh branch per run instead of touching the default branch directly
   useSafeBranch   Boolean       @default(true)
+  // Wait for every earlier queued/running Run before starting, and block later Runs until done.
+  waitForPreviousRuns Boolean   @default(false)
   timeoutSeconds  Int           @default(1800)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
