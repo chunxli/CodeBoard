@@ -1,33 +1,47 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
 
-let caffeinate: ReturnType<typeof spawn> | null = null;
+let keepAwakeProcess: ReturnType<typeof spawn> | null = null;
 
-/**
- * Best-effort: prevents the machine from sleeping/hibernating while this server process is
- * alive, since a sleeping machine suspends the node-cron scheduler (see README "Scheduling
- * notes"). Currently only implemented for macOS (via the built-in `caffeinate` CLI); a no-op
- * elsewhere. Opt out with `CODEBOARD_PREVENT_SLEEP=false`.
- */
 export function preventSystemSleep(): void {
-  if (caffeinate) return;
+  if (keepAwakeProcess) return;
   if (process.env.CODEBOARD_PREVENT_SLEEP === "false") return;
 
-  if (os.platform() !== "darwin") {
-    console.log(`[keep-awake] not supported on ${os.platform()}; the machine may sleep and pause scheduled runs.`);
+  const platform = os.platform();
+  if (platform === "win32") {
+    const script = [
+      "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class CodeBoardPower { [DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint flags); }'",
+      "[CodeBoardPower]::SetThreadExecutionState(0x80000001) | Out-Null",
+      `try { Wait-Process -Id ${process.pid} } finally { [CodeBoardPower]::SetThreadExecutionState(0x80000000) | Out-Null }`,
+    ].join("; ");
+
+    keepAwakeProcess = spawn(
+      "powershell.exe",
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      { stdio: "ignore", windowsHide: true }
+    );
+    keepAwakeProcess.on("error", handleStartError);
+    keepAwakeProcess.on("exit", () => {
+      keepAwakeProcess = null;
+    });
+    console.log("[keep-awake] Windows system sleep prevention active while this server is running.");
     return;
   }
 
-  try {
-    // -d/-i/-m/-s: prevent display/idle/disk/system sleep. -w <pid>: caffeinate exits on its
-    // own once that pid exits, so it's automatically tied to this server's lifetime.
-    caffeinate = spawn("caffeinate", ["-dims", "-w", String(process.pid)], { stdio: "ignore" });
-    caffeinate.on("error", (err) => {
-      console.error("[keep-awake] failed to start caffeinate:", err.message);
-      caffeinate = null;
+  if (platform === "darwin") {
+    keepAwakeProcess = spawn("caffeinate", ["-dims", "-w", String(process.pid)], { stdio: "ignore" });
+    keepAwakeProcess.on("error", handleStartError);
+    keepAwakeProcess.on("exit", () => {
+      keepAwakeProcess = null;
     });
     console.log("[keep-awake] caffeinate running — the machine won't sleep while this server is up.");
-  } catch (err) {
-    console.error("[keep-awake] failed to start caffeinate:", err);
+    return;
   }
+
+  console.log(`[keep-awake] not supported on ${platform}; the machine may sleep and pause scheduled runs.`);
+}
+
+function handleStartError(err: Error): void {
+  console.error("[keep-awake] failed to start:", err.message);
+  keepAwakeProcess = null;
 }
