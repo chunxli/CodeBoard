@@ -15,6 +15,7 @@ export const createTaskSchema = z.object({
   prompt: z.string().min(1).max(20000),
   agent: z.string().max(200).nullish(),
   model: z.string().max(200).nullish(),
+  fallbackModel: z.string().max(200).nullish(),
   contextTier: z.enum(["default", "long_context"]).nullish(),
   reasoningEffort: z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]).nullish(),
   permissionMode: z.enum(["default", "full"]).default("default"),

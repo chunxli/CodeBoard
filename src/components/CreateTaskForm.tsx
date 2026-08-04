@@ -20,6 +20,7 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
   const [prompt, setPrompt] = useState("");
   const [agent, setAgent] = useState("");
   const [model, setModel] = useState("");
+  const [fallbackModel, setFallbackModel] = useState("");
   const [contextTier, setContextTier] = useState<"" | "default" | "long_context">("");
   const [reasoningEffort, setReasoningEffort] = useState<
     "" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
@@ -62,6 +63,7 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
           prompt,
           agent: agent || null,
           model: model || null,
+          fallbackModel: fallbackModel || null,
           contextTier: contextTier || null,
           reasoningEffort: reasoningEffort || null,
           permissionMode,
@@ -177,7 +179,11 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
             <select
               className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => {
+                const nextModel = e.target.value;
+                setModel(nextModel);
+                if (!nextModel || fallbackModel === nextModel) setFallbackModel("");
+              }}
             >
               <option value="">Model：auto（让 Copilot 自动选择）</option>
               {availableModels.map((m) => (
@@ -187,6 +193,19 @@ export default function CreateTaskForm({ repos }: { repos: Repo[] }) {
               ))}
             </select>
           </div>
+          <select
+            className="w-full rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
+            value={fallbackModel}
+            onChange={(e) => setFallbackModel(e.target.value)}
+            disabled={!model}
+          >
+            <option value="">Fallback Model：{model ? "不回退" : "请先选择主模型"}</option>
+            {availableModels.map((availableModel) => (
+              <option key={availableModel} value={availableModel} disabled={availableModel === model}>
+                Fallback Model：{availableModel}
+              </option>
+            ))}
+          </select>
           <div className="grid grid-cols-2 gap-3">
             <select
               className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"

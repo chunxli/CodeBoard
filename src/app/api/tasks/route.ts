@@ -32,6 +32,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (parsed.data.fallbackModel && !parsed.data.model) {
+    return NextResponse.json({ error: "A primary model is required when fallbackModel is set" }, { status: 400 });
+  }
+  if (parsed.data.fallbackModel && parsed.data.fallbackModel === parsed.data.model) {
+    return NextResponse.json({ error: "fallbackModel must differ from model" }, { status: 400 });
+  }
+
   const repo = await prisma.repo.findUnique({ where: { id: parsed.data.repoId, userId } });
   if (!repo) return NextResponse.json({ error: "Repo not found" }, { status: 404 });
 

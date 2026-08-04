@@ -61,13 +61,16 @@ export async function executeRun(runId: string): Promise<void> {
       prompt: task.prompt,
       agent: task.agent,
       model: task.model,
+      fallbackModel: task.fallbackModel,
       contextTier: task.contextTier,
       reasoningEffort: task.reasoningEffort,
       permissionMode,
       outputFormat,
       timeoutSeconds: task.timeoutSeconds,
-      onSpawn: ({ pid, command }) => {
-        void prisma.run.update({ where: { id: run.id }, data: { pid, command } }).catch(() => {});
+      onSpawn: ({ pid, command, model }) => {
+        void prisma.run
+          .update({ where: { id: run.id }, data: { pid, command, model } })
+          .catch(() => {});
       },
     });
 
@@ -82,6 +85,7 @@ export async function executeRun(runId: string): Promise<void> {
               ? "SUCCESS"
               : "FAILED",
         exitCode: result.exitCode,
+        model: result.model,
         logPath: result.logPath,
         finishedAt: new Date(),
         cpuTimeMs: result.cpuTimeMs,

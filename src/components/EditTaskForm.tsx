@@ -13,6 +13,7 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
   const [prompt, setPrompt] = useState(task.prompt);
   const [agent, setAgent] = useState(task.agent ?? "");
   const [model, setModel] = useState(task.model ?? "");
+  const [fallbackModel, setFallbackModel] = useState(task.fallbackModel ?? "");
   const [contextTier, setContextTier] = useState<"" | "default" | "long_context">(
     (task.contextTier as "default" | "long_context" | null) ?? ""
   );
@@ -69,6 +70,7 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
           prompt,
           agent: agent || null,
           model: model || null,
+          fallbackModel: fallbackModel || null,
           contextTier: contextTier || null,
           reasoningEffort: reasoningEffort || null,
           permissionMode,
@@ -185,7 +187,11 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
             <select
               className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => {
+                const nextModel = e.target.value;
+                setModel(nextModel);
+                if (!nextModel || fallbackModel === nextModel) setFallbackModel("");
+              }}
             >
               <option value="">Model：auto（让 Copilot 自动选择）</option>
               {model && !availableModels.includes(model) && (
@@ -198,6 +204,24 @@ export default function EditTaskForm({ task, repos }: { task: Task; repos: Repo[
               ))}
             </select>
           </div>
+          <select
+            className="w-full rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"
+            value={fallbackModel}
+            onChange={(e) => setFallbackModel(e.target.value)}
+            disabled={!model}
+          >
+            <option value="">Fallback Model：{model ? "不回退" : "请先选择主模型"}</option>
+            {fallbackModel && !availableModels.includes(fallbackModel) && (
+              <option value={fallbackModel}>
+                Fallback Model：{fallbackModel}（当前值，已不在支持列表中）
+              </option>
+            )}
+            {availableModels.map((availableModel) => (
+              <option key={availableModel} value={availableModel} disabled={availableModel === model}>
+                Fallback Model：{availableModel}
+              </option>
+            ))}
+          </select>
           <div className="grid grid-cols-2 gap-3">
             <select
               className="rounded border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm"

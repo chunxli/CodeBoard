@@ -40,6 +40,12 @@ export default async function TaskDetailPage({
             {task.cronExpression && ` · ${task.cronExpression}`}
             {task.repo.hostname && ` · 机器：${task.repo.hostname}`}
           </p>
+          {(task.model || task.fallbackModel) && (
+            <p className="mt-1 text-sm text-neutral-400">
+              模型：{task.model ?? "auto"}
+              {task.fallbackModel && ` · 回退：${task.fallbackModel}`}
+            </p>
+          )}
           {task.triggerType === "SCHEDULE" && (
             <p className="mt-1 text-sm text-neutral-400">
               下次运行：{task.enabled ? <NextRunCountdown nextRun={nextRunAt} /> : "任务已禁用"}

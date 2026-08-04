@@ -36,6 +36,16 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const model = parsed.data.model === undefined ? existing.model : parsed.data.model;
+  const fallbackModel =
+    parsed.data.fallbackModel === undefined ? existing.fallbackModel : parsed.data.fallbackModel;
+  if (fallbackModel && !model) {
+    return NextResponse.json({ error: "A primary model is required when fallbackModel is set" }, { status: 400 });
+  }
+  if (fallbackModel && fallbackModel === model) {
+    return NextResponse.json({ error: "fallbackModel must differ from model" }, { status: 400 });
+  }
+
   if (parsed.data.repoId) {
     const repo = await prisma.repo.findUnique({ where: { id: parsed.data.repoId, userId } });
     if (!repo) return NextResponse.json({ error: "Repo not found" }, { status: 404 });

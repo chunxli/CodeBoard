@@ -7,7 +7,7 @@ It's a single Next.js process: the UI, the API routes, and the background cron s
 ## Features
 
 - **Repos** — register a repo by local path or git URL (auto-clone/pull on demand), with a built-in folder browser and default-branch auto-detection.
-- **Tasks** — define a prompt, target repo, optional agent/model, permission mode (`default` vs `--allow-all`), and output format (`text` or `json`) per task.
+- **Tasks** — define a prompt, target repo, optional agent/model with a configurable fallback when the primary model is unavailable, permission mode (`default` vs `--allow-all`), and output format (`text` or `json`) per task.
 - **Triggers** — run a task manually from the UI, on a `node-cron` schedule, from a signed GitHub webhook, or via an API-token-protected external endpoint.
 - **Live runs** — each execution streams the Copilot CLI's output live over SSE; `json`-format output is summarized into short, readable lines (tool calls, reasoning, results) instead of raw event JSON. Live PID/CPU/memory stats and a cancel button are shown while a run is in progress.
 - **Git safety** — every run pulls the repo's default branch first, then works on its own dedicated `codeboard/run-<id>` branch so a run can never edit the default branch directly. The run detail page shows a colored (+/-) diff of everything the run changed.
