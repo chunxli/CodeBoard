@@ -25,8 +25,11 @@ export async function executeRun(runId: string): Promise<void> {
   // The run may have been cancelled while still queued (before it ever started).
   if (run.status === "CANCELLED") return;
 
+  let repoPath: string | null = null;
+  let runStarted = false;
+
   try {
-    const repoPath = await resolveRepoWorkdir(task.repo);
+    repoPath = await resolveRepoWorkdir(task.repo);
     await syncRepoToDefaultBranch(task.repo, repoPath);
     let branchName: string | null = null;
     const baseCommit = await getHeadCommit(repoPath);
@@ -51,6 +54,7 @@ export async function executeRun(runId: string): Promise<void> {
         logPath: getRunLogPath(run.id),
       },
     });
+    runStarted = true;
 
     const permissionMode: RunPermissionMode = task.permissionMode === "full" ? "full" : "default";
     const outputFormat: RunOutputFormat = task.outputFormat === "json" ? "json" : "text";
@@ -74,6 +78,7 @@ export async function executeRun(runId: string): Promise<void> {
       },
     });
 
+    const finalCommit = await getHeadCommit(repoPath).catch(() => null);
     await prisma.run.update({
       where: { id: run.id },
       data: {
@@ -84,6 +89,7 @@ export async function executeRun(runId: string): Promise<void> {
             : result.exitCode === 0
               ? "SUCCESS"
               : "FAILED",
+        finalCommit,
         exitCode: result.exitCode,
         model: result.model,
         logPath: result.logPath,
@@ -93,10 +99,12 @@ export async function executeRun(runId: string): Promise<void> {
       },
     });
   } catch (err) {
+    const finalCommit = runStarted && repoPath ? await getHeadCommit(repoPath).catch(() => null) : null;
     await prisma.run.update({
       where: { id: run.id },
       data: {
         status: "FAILED",
+        finalCommit,
         errorMessage: err instanceof Error ? err.message : String(err),
         finishedAt: new Date(),
       },

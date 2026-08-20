@@ -111,6 +111,9 @@ model Run {
   // ever checking anything out, whether the run committed to its own branch or straight to the
   // default branch (when useSafeBranch is off).
   baseCommit   String?
+  // Best-effort HEAD commit captured when a started run reaches a terminal state. Together with
+  // baseCommit, this freezes the committed diff so later branch updates cannot change it.
+  finalCommit  String?
   logPath      String?
   // Output format actually used for this run (copied from the Task at start time, since the
   // Task's setting could change later and the log's format shouldn't be reinterpreted).

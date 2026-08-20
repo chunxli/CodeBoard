@@ -36,6 +36,10 @@ export default async function RunDetailPage({
   const remoteUrl = await getRemoteUrl(workdirPath);
 
   const isLive = run.status === "PENDING" || run.status === "RUNNING";
+  const commitRange =
+    run.baseCommit && run.finalCommit
+      ? `${run.baseCommit.slice(0, 8)}..${run.finalCommit.slice(0, 8)}`
+      : null;
 
   return (
     <div className="space-y-6">
@@ -54,6 +58,17 @@ export default async function RunDetailPage({
           {run.startedAt && ` · Duration: ${formatDuration(run.startedAt, run.finishedAt)}`}
           {(run.hostname ?? run.task.repo.hostname) && ` · Machine: ${run.hostname ?? run.task.repo.hostname}`}
         </p>
+        {run.baseCommit && (
+          <p className="text-sm text-neutral-400">
+            Start: <span title={run.baseCommit}>{run.baseCommit.slice(0, 8)}</span>
+            {run.finalCommit && (
+              <>
+                {" · End: "}
+                <span title={run.finalCommit}>{run.finalCommit.slice(0, 8)}</span>
+              </>
+            )}
+          </p>
+        )}
         {run.errorMessage && <p className="mt-2 text-sm text-red-400">{run.errorMessage}</p>}
       </div>
 
@@ -92,7 +107,7 @@ export default async function RunDetailPage({
 
       {diff && (
         <div>
-          <h2 className="mb-2 text-lg font-semibold">Diff (vs {run.task.repo.defaultBranch})</h2>
+          <h2 className="mb-2 text-lg font-semibold">Diff{commitRange && ` (${commitRange})`}</h2>
           <DiffView diff={diff} />
         </div>
       )}

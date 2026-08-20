@@ -40,22 +40,16 @@ export async function getBranchDiff(repoPath: string, fromRef: string, toRef: st
   return result.stdout;
 }
 
-/**
- * Computes a run's diff as `baseCommit..target`, where `target` is the run's own branch if it
- * used one, or the repo's default branch if it committed directly to it (useSafeBranch off).
- * `baseCommit` is the commit the default branch was at right before the run started. No
- * checkout involved, so this works regardless of what else is currently active on the repo.
- */
+/** Computes the immutable committed diff captured for a run without checking out either ref. */
 export async function getRunDiff(run: {
-  branchName: string | null;
   baseCommit: string | null;
+  finalCommit: string | null;
   task: { repo: Repo };
 }): Promise<string> {
-  if (!run.baseCommit) return "";
+  if (!run.baseCommit || !run.finalCommit) return "";
   try {
     const repoPath = await resolveRepoWorkdir(run.task.repo);
-    const target = run.branchName ?? run.task.repo.defaultBranch;
-    return await getBranchDiff(repoPath, run.baseCommit, target);
+    return await getBranchDiff(repoPath, run.baseCommit, run.finalCommit);
   } catch {
     return "";
   }
