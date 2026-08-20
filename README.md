@@ -30,6 +30,8 @@ Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · Prisma 7 
 
 ### Run in dev mode
 
+Copy `.env.example` to `.env` and fill in the Microsoft Entra ID credentials and `AUTH_SECRET` before starting the app.
+
 ```bash
 npm install
 npm run quickstart   # generates the Prisma client, applies migrations, then starts `next dev`
